@@ -49,12 +49,12 @@ FIELDS TERMINATED BY ','
 LINES TERMINATED BY '\n'
 IGNORE 1 ROWS
 (
-    prd_id,
-    prd_key,
-    prd_nm,
+    @prd_id,
+    @prd_key,
+    @prd_nm,
     @prd_cost,
     @prd_line,
-    prd_start_dt,
+    @prd_start_dt,
     @prd_end_dt
 )
 SET
@@ -63,8 +63,8 @@ SET
     prd_nm       = NULLIF(@prd_nm, ''),
     prd_cost     = NULLIF(@prd_cost, ''),
     prd_line     = NULLIF(@prd_line, ''),
-    prd_start_dt = NULLIF(@prd_start_dt, ''),
-    prd_end_dt   = NULLIF(@prd_end_dt, '');
+    prd_start_dt = STR_TO_DATE(NULLIF(TRIM(@prd_start_dt), ''), '%Y-%m-%d'),
+    prd_end_dt   = STR_TO_DATE(NULLIF(TRIM(@prd_end_dt), ''), '%Y-%m-%d');
 
 
 
