@@ -1,0 +1,255 @@
+-- ====================================================================
+-- Database Exploration
+-- ====================================================================
+
+-- Exploring all objects in the Database
+SELECT * FROM INFORMATION_SCHEMA.TABLES;
+
+-- Exploring all columns in the Database/Table
+SELECT * FROM INFORMATION_SCHEMA.COLUMNS;
+
+SELECT * FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME='dim_customers';
+
+
+-- ====================================================================
+-- Dimensions Exploration
+-- ====================================================================
+
+-- Explore all countries the customers come from
+SELECT DISTINCT country
+FROM gold.dim_customers;
+
+-- Explore all categories - "The Major Divisions"
+SELECT DISTINCT category
+FROM gold.dim_products;
+
+SELECT DISTINCT category, subcategory
+FROM gold.dim_products
+ORDER BY 1, 2;
+
+
+-- ====================================================================
+-- Date Exploration
+-- ====================================================================
+
+-- Explore the earliest and latest date in order_date column
+SELECT
+	MIN(order_date) AS first_order_date,
+    MAX(order_date) AS last_order_date,
+    TIMESTAMPDIFF(YEAR, MIN(order_date), MAX(order_date)) AS order_range_years,
+    TIMESTAMPDIFF(MONTH, MIN(order_date), MAX(order_date)) AS order_range_months
+FROM gold.fact_sales;
+
+-- Find youngest and oldest customer birthdates and their ages
+SELECT
+	MIN(birth_date) AS oldest_birthdate,
+    TIMESTAMPDIFF(YEAR, MIN(birth_date), CURDATE()) AS oldest_age,
+    MAX(birth_date) AS youngest_birthdate,
+    TIMESTAMPDIFF(YEAR, MAX(birth_date), CURDATE()) AS youngest_age
+FROM gold.dim_customers;
+
+
+-- ====================================================================
+-- Measures Exploration
+-- ====================================================================
+
+-- Find Total Sales
+SELECT SUM(sales_amount) AS total_sales
+FROM gold.fact_sales;
+
+-- Find how many items are sold
+SELECT SUM(quantity) AS items_sold
+FROM gold.fact_sales;
+
+-- Find the average selling price
+SELECT AVG(price) AS avg_price
+FROM gold.fact_sales;
+
+-- Find the total number of orders and total distict orders
+SELECT 
+	COUNT(order_number) AS total_orders,
+    COUNT(DISTINCT order_number) AS total_distinct_orders
+FROM gold.fact_sales;
+
+-- Find the total number of products and total distict products
+SELECT 
+	COUNT(product_key) AS total_products,
+    COUNT(DISTINCT product_key) AS total_distinct_products
+FROM gold.dim_products;
+
+-- Find the total number of customers
+SELECT 
+	COUNT(customer_key) AS total_customers
+FROM gold.dim_customers;
+
+-- Find the total number of customers who placed an order
+SELECT 
+	COUNT(DISTINCT customer_key) AS total_customers_placed_order
+FROM gold.fact_sales;
+
+-- Generate a report that shows all key metrics of the business
+SELECT 'Total Sales' AS measure_name, ROUND(SUM(sales_amount)) AS measure_value FROM gold.fact_sales
+UNION ALL
+SELECT 'Total Quantity' AS measure_name, ROUND(SUM(quantity)) AS measure_value FROM gold.fact_sales
+UNION ALL
+SELECT 'Average Price' AS measure_name, ROUND(AVG(price)) AS measure_value FROM gold.fact_sales
+UNION ALL
+SELECT 'Total No.of Orders' AS measure_name, ROUND(COUNT(DISTINCT order_number)) AS measure_value FROM gold.fact_sales
+UNION ALL
+SELECT 'Total No.of Products' AS measure_name, ROUND(COUNT(product_name)) AS measure_value FROM gold.dim_products
+UNION ALL
+SELECT 'Total No.of Customers' AS measure_name, ROUND(COUNT(customer_key)) AS measure_value FROM gold.dim_customers;
+
+
+-- ====================================================================
+-- Magnitude Analysis
+-- ====================================================================
+
+-- Find total customers by countries
+SELECT
+	country,
+    COUNT(*) AS total_customers
+FROM gold.dim_customers
+GROUP BY country
+ORDER BY total_customers DESC;
+
+-- Find total customers by gender
+SELECT
+	gender,
+    COUNt(*) AS total_customers
+FROM gold.dim_customers
+GROUP BY gender
+ORDER BY total_customers DESC;
+
+-- Find total products by category
+SELECT
+	category,
+    COUNT(*) AS total_products
+FROM gold.dim_products
+GROUP BY category
+ORDER BY total_products DESC;
+
+-- What is the average costs in each category
+SELECT
+	category,
+    ROUND(AVG(COALESCE(cost,0))) AS avg_cost
+FROM gold.dim_products
+GROUP BY category
+ORDER BY avg_cost DESC;
+
+-- What is the total revenue generated for each category
+/*SELECT
+	pr.category,
+    SUM(sls.sales_amount) AS total_revenue
+FROM gold.dim_products pr
+LEFT JOIN gold.fact_sales sls
+ON pr.product_key=sls.product_key
+GROUP BY pr.category
+ORDER BY total_revenue DESC;*/
+
+SELECT
+    pr.category,
+    SUM(fs.total_sales) AS total_revenue
+FROM gold.dim_products pr
+LEFT JOIN (
+    SELECT
+        product_key,
+        SUM(sales_amount) AS total_sales
+    FROM gold.fact_sales
+    GROUP BY product_key
+) fs
+ON pr.product_key = fs.product_key
+GROUP BY pr.category
+ORDER BY total_revenue DESC;
+
+-- What is the total revenue generated by each customer
+/*SELECT
+	cu.customer_key,
+    SUM(sls.sales_amount) AS total_revenue
+FROM gold.dim_customers cu
+LEFT JOIN gold.fact_sales sls
+ON cu.customer_key=sls.customer_key
+GROUP BY cu.customer_key
+ORDER BY total_revenue DESC;*/
+
+SELECT
+    cu.customer_key,
+    cu.first_name,
+    cu.last_name,
+    SUM(sls.total_sales) AS total_revenue
+FROM gold.dim_customers cu
+LEFT JOIN (
+    SELECT
+        customer_key,
+        SUM(sales_amount) AS total_sales
+    FROM gold.fact_sales
+    GROUP BY customer_key
+) sls
+ON cu.customer_key = sls.customer_key
+GROUP BY cu.customer_key, cu.first_name, last_name
+ORDER BY total_revenue DESC;
+
+-- What is the distribution of sold items across countries
+/*SELECT
+	cu.country,
+    SUM(sls.quantity) AS total_sold_items
+FROM gold.dim_customers cu
+LEFT JOIN gold.fact_sales sls
+ON cu.customer_key=sls.customer_key
+GROUP BY cu.country
+ORDER BY total_sold_items DESC;*/
+
+SELECT
+    cu.country,
+    SUM(sls.total_quantity) AS total_sold_items
+FROM gold.dim_customers cu
+LEFT JOIN (
+    SELECT
+        customer_key,
+        SUM(quantity) AS total_quantity
+    FROM gold.fact_sales
+    GROUP BY customer_key
+) sls
+ON cu.customer_key = sls.customer_key
+GROUP BY cu.country
+ORDER BY total_sold_items DESC;
+
+
+-- ====================================================================
+-- Ranking Analysis
+-- ====================================================================
+
+-- Which 5 products generate the highest revenue
+SELECT
+	pr.product_name,
+    SUM(sls.sales_amount) AS total_revenue
+FROM gold.dim_products pr
+LEFT JOIN (
+	SELECT
+		product_key,
+        SUM(sales_amount) AS sales_amount
+	FROM gold.fact_sales
+    GROUP BY product_key
+) sls
+ON pr.product_key=sls.product_key
+GROUP BY pr.product_name
+ORDER BY total_revenue DESC
+LIMIT 5;
+
+-- What are the 5 worst performing products in terms of sales
+SELECT
+	pr.product_name,
+    SUM(sls.sales_amount) AS total_revenue
+FROM gold.dim_products pr
+JOIN (
+	SELECT
+		product_key,
+        SUM(sales_amount) AS sales_amount
+	FROM gold.fact_sales
+    GROUP BY product_key
+) sls
+ON pr.product_key=sls.product_key
+GROUP BY pr.product_name
+ORDER BY total_revenue
+LIMIT 5;
